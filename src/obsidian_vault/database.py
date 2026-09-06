@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS chunks_file_id ON chunks(file_id);
 
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+    file_id UNINDEXED,
+    source_path UNINDEXED,
+    content_hash UNINDEXED,
+    title,
+    body,
+    tokenize = 'unicode61'
+);
+
 CREATE TABLE IF NOT EXISTS chunk_settings (
     singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
     signature TEXT NOT NULL
@@ -125,3 +134,33 @@ class ChunkDatabase:
         rows = self.connection.execute("SELECT file_id FROM notes").fetchall()
         stale = [(file_id,) for (file_id,) in rows if file_id not in file_ids]
         self.connection.executemany("DELETE FROM notes WHERE file_id = ?", stale)
+
+    def sync_keyword_notes(self, notes: Iterable[Note], *, rebuild: bool = False) -> None:
+        """Maintain full-note FTS rows within the caller's sync transaction.
+
+        This also backfills existing chunk databases without re-chunking notes
+        or generating embeddings. Frontmatter is excluded from searchable text.
+        """
+        stored = {
+            row[0]: row[1:]
+            for row in self.connection.execute(
+                "SELECT file_id, source_path, title, content_hash FROM notes_fts"
+            )
+        }
+        seen = set()
+        for note in notes:
+            seen.add(note.file_id)
+            if not rebuild and stored.get(note.file_id) == (
+                note.relative_path, note.title, note.content_hash
+            ):
+                continue
+            self.connection.execute("DELETE FROM notes_fts WHERE file_id = ?", (note.file_id,))
+            self.connection.execute(
+                "INSERT INTO notes_fts(file_id, source_path, content_hash, title, body) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (note.file_id, note.relative_path, note.content_hash, note.title, note.body),
+            )
+        self.connection.executemany(
+            "DELETE FROM notes_fts WHERE file_id = ?",
+            ((file_id,) for file_id in stored.keys() - seen),
+        )

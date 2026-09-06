@@ -15,6 +15,7 @@ from .search import (
     render_results,
 )
 from .sync import sync_vault
+from .keyword_search import search_keywords
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,14 +38,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum words per chunk, including its heading path",
     )
     index = subparsers.add_parser(
-        "index", help="chunk the vault and synchronize embeddings with Chroma"
+        "index", help="synchronize chunks, keyword index, and Chroma embeddings"
     )
     index.add_argument("--vault", type=Path, default=Path.cwd(), help="vault directory")
     index.add_argument("--database", type=Path, help="SQLite database path")
     index.add_argument("--chroma", type=Path, help="Chroma database directory")
     index.add_argument("--collection", default="obsidian-vault")
     index.add_argument("--batch-size", type=int, default=128)
-    index.add_argument("--rebuild", action="store_true", help="rebuild all SQLite chunks")
+    index.add_argument("--rebuild", action="store_true", help="rebuild SQLite chunks and keyword index")
     search = subparsers.add_parser("search", help="query the Chroma collection")
     search.add_argument("query")
     search.add_argument("--vault", type=Path, default=Path.cwd(), help="vault directory")
@@ -64,11 +65,43 @@ def build_parser() -> argparse.ArgumentParser:
     output = search.add_mutually_exclusive_group()
     output.add_argument("--plain", action="store_true", help="disable Rich panels")
     output.add_argument("--json", action="store_true", help="emit a JSON array of search results")
+    keywords = subparsers.add_parser("search-keywords", help="rank notes using the SQLite FTS5 index")
+    keywords.add_argument("query")
+    keywords.add_argument("--vault", type=Path, default=Path.cwd())
+    keywords.add_argument("--database", type=Path, help="default: VAULT/data/chunks.sqlite3")
+    keywords.add_argument("--results", type=int, default=20)
+    keywords.add_argument("--vault-id", help="Obsidian vault ID or name")
+    keywords.add_argument("--json", action="store_true", help="emit a JSON result array")
+    keywords.add_argument("--fts", action="store_true", help="interpret query as FTS5 syntax (OR, AND, NEAR, quoted phrases)")
+    keywords.add_argument("--open", type=int, metavar="RANK", help="open a numbered result in Obsidian")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.command == "search-keywords":
+        vault = args.vault.expanduser().resolve()
+        reference = args.vault_id or find_vault_id(vault) or vault.name
+        try:
+            results = search_keywords(args.database or vault / "data/chunks.sqlite3",
+                                      args.query, reference, args.results, fts=args.fts)
+        except (ValueError, OSError) as error:
+            raise SystemExit(str(error)) from error
+        if args.json:
+            print(json.dumps([asdict(result) for result in results], ensure_ascii=False))
+        else:
+            for result in results:
+                print(f"\n{result.rank}. {result.heading_path[0]}")
+                print(result.source_path)
+                print(result.document)
+                print(result.uri)
+            if not results:
+                print("No results found.")
+        if args.open is not None:
+            if not 1 <= args.open <= len(results):
+                raise SystemExit(f"--open must be between 1 and {len(results)} for this query")
+            open_result(results[args.open - 1])
+        return 0
     if args.command == "chunk":
         if args.max_words < 1:
             raise SystemExit("--max-words must be greater than zero")

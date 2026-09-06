@@ -188,6 +188,11 @@ def sync_vault(
                     )
                     last_report = now
             database.delete_notes_not_in(processed_ids)
+            report(f"Synchronizing keyword index for {len(processed_ids)} eligible notes...")
+            database.sync_keyword_notes(
+                (note for note in valid_notes if note.file_id in processed_ids),
+                rebuild=rebuild,
+            )
             database.connection.execute(
                 "INSERT OR REPLACE INTO chunk_settings(singleton, signature) VALUES (1, ?)",
                 (signature if cacheable else "",),

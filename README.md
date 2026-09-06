@@ -24,7 +24,13 @@ uv run --project ~/projects/obsidian-vault \
 ```
 
 This prepares section-based chunks in `VAULT/data/chunks.sqlite3` and
-synchronizes the `obsidian-vault` collection in `VAULT/data/chroma`.
+maintains a full-note SQLite FTS5 keyword index (`notes_fts`) in that same
+SQLite database, and synchronizes the `obsidian-vault` collection in
+`VAULT/data/chroma`. This one command updates all three representations.
+The keyword index stores each eligible note's filename-derived title and full
+Markdown body (excluding frontmatter), independently of chunk boundaries.
+Existing databases gain the keyword index on their next indexing run, including
+unchanged notes, without requiring `--rebuild` or new embeddings.
 Use `--database`, `--chroma`, or `--collection` to override these defaults.
 Keep generated data out of the vault's Git repository.
 
@@ -40,7 +46,7 @@ Run the index command after editing notes; there is no background watcher.
 Use `index --rebuild` to force re-chunking while still reusing unchanged
 embeddings.
 
-For SQLite chunks only, without embedding generation:
+For SQLite chunks and the keyword index, without embedding generation:
 
 ```sh
 uv run --project ~/projects/obsidian-vault \
@@ -50,6 +56,38 @@ uv run --project ~/projects/obsidian-vault \
 `chunk` uses a word limit; `index` uses the embedding model's token limit.
 If `--vault` is omitted, the CLI uses the current working directory. Specifying
 `--project` selects the Python environment; it does not select the vault.
+
+## Which notes are indexed?
+
+**Every indexed note must have a nonempty, unique `file_id` property in YAML
+frontmatter.** For example:
+
+```markdown
+---
+file_id: 54a7d801-b7fc-4f16-8907-15e4fbb33d89
+---
+
+Your note content goes here.
+```
+
+A UUID is a useful convention, but the library does not require UUID syntax.
+Keep the ID stable when editing or renaming a note; give copied notes a new ID.
+The indexer does not generate IDs or change your Markdown files.
+
+- Missing or empty IDs: warn and skip the note.
+- Duplicate IDs: warn and skip **all** notes sharing that ID.
+- Unreadable or invalid notes: warn and skip them.
+- Previously indexed notes that are deleted or become ineligible are removed
+  from the SQLite indexes; a successful `index` run also removes their Chroma records.
+
+These rules apply to both keyword and semantic indexing. The scanner considers
+`.md` and `.markdown` files, skipping hidden directories and generated directories
+such as `data`, `node_modules`, and `.venv`.
+
+The panel's filename and literal ripgrep searches read saved files directly;
+they do not require a `file_id`. Indexed keyword search must be refreshed with
+`index` (or `chunk` for SQLite only), just as semantic search must be refreshed.
+Use `search-keywords` for FTS5 queries; `search` continues to use Chroma.
 
 ## Search
 
@@ -68,6 +106,49 @@ The CLI discovers the vault ID from Obsidian's local configuration, falling
 back to the vault directory name. Use `--vault-id` to override it. Opening
 results requires a working `obsidian://` URI handler; searching does not
 require the Obsidian application to be running.
+
+## Keyword search (FTS5)
+
+After running `index`, search remembered words without needing the exact phrase:
+
+```sh
+uv run --project ~/projects/obsidian-vault \
+  obsidian-vault search-keywords --vault ~/obsidian_vault \
+  --results 10 -- "relu activation function"
+```
+
+Ordinary input is split into words and matched with OR: any word may match,
+so missing or intervening words are allowed. FTS5 BM25 ranks results, weighting
+filename titles five times as strongly as body text. This is word matching,
+not substring search, typo correction, or semantic matching. The Unicode
+tokenizer ignores case and, by default, Latin diacritics; no stemming is used.
+More matched words do not guarantee a higher rank. Each result represents one
+note and includes a body excerpt and an Obsidian link.
+
+To use operators, quoted phrases, or proximity syntax, pass `--fts`:
+
+```sh
+uv run --project ~/projects/obsidian-vault \
+  obsidian-vault search-keywords --vault ~/obsidian_vault --fts \
+  -- 'relu OR activation OR function'
+uv run --project ~/projects/obsidian-vault \
+  obsidian-vault search-keywords --vault ~/obsidian_vault --fts \
+  -- 'NEAR(relu function, 5)'
+```
+
+Without `--fts`, words such as `OR` are ordinary search words. Invalid FTS
+syntax produces an error. Search opens SQLite read-only and never refreshes
+or creates an index; rerun `index` after changing notes. No model, embedding
+server, or running Obsidian instance is required.
+
+Options include `--database`, `--vault-id`, `--results` (default 20), `--open N`,
+and `--json`. JSON is an array with `rank`, `file_id`, `source_path`,
+`heading_path`, `document` (plain-text excerpt), `score` (FTS5 BM25; lower is
+better), and `uri`. Empty results produce `[]`. Scores are not probabilities
+and are not comparable to semantic distances.
+
+This command is available in the terminal; the Omarchy panel's Text mode still
+uses literal ripgrep search until keyword search is connected there.
 
 ## Omarchy integration
 

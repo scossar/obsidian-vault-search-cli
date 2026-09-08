@@ -136,6 +136,29 @@ uv run --project ~/projects/obsidian-vault \
   -- 'NEAR(relu function, 5)'
 ```
 
+With `--fts`, the library accepts
+[SQLite FTS5 query syntax](https://www.sqlite.org/fts5.html#full_text_query_syntax):
+
+| Syntax | Example | Meaning |
+| --- | --- | --- |
+| `AND` | `relu AND sigmoid` | Both match. |
+| `OR` | `relu OR sigmoid` | Either matches. |
+| `NOT` | `relu NOT sigmoid` | Include relu; exclude sigmoid. |
+| Whitespace | `relu sigmoid` | Implicit AND. |
+| Parentheses | `relu NOT (sigmoid OR softmax)` | Group expressions. |
+| `"…"`, `+` | `"activation function"`, `activation + function` | Consecutive tokens, in order. |
+| `*` | `activ*`, `"activation func"*` | Final token is a prefix; keep `*` outside quotes. |
+| `^` | `title:^relu` | Phrase starts at the column's first token; unavailable inside NEAR. |
+| `NEAR(…, N)` | `NEAR(relu function, 5)` | Either order, at most N intervening tokens; N defaults to 10. |
+| `:` and `{…}` | `title:relu`, `{title body}:relu`, `body:(relu OR sigmoid)` | Restrict search to columns. |
+| `-` before a column filter | `-title:relu`, `-{title}:relu` | Search other columns. |
+
+Use uppercase `AND`, `OR`, `NOT`, and `NEAR`. Standalone `NOT sigmoid`
+is invalid. Precedence: implicit AND, NOT, AND, OR; use explicit operators
+beside parentheses. Quote punctuation-containing terms; escape embedded
+double quotes by doubling them. Phrases match tokens, not literal punctuation.
+Only `title` and `body` are indexed; paths and IDs are not searchable fields.
+
 Without `--fts`, words such as `OR` are ordinary search words. Invalid FTS
 syntax produces an error. Search opens SQLite read-only and never refreshes
 or creates an index; rerun `index` after changing notes. No model, embedding
@@ -148,8 +171,9 @@ with FTS matches underlined and line breaks preserved), `score` (FTS5 BM25; lowe
 better), and `uri`. Empty results produce `[]`. Scores are not probabilities
 and are not comparable to semantic distances.
 
-This command is available in the terminal; the Omarchy panel's Text mode still
-uses literal ripgrep search until keyword search is connected there.
+This command is also available through the Omarchy panel's **Keywords** mode.
+Enable **FTS syntax** there to use these operators. **Text** mode uses literal
+ripgrep search.
 
 ## Omarchy integration
 

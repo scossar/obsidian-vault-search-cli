@@ -70,9 +70,14 @@ file_id: 54a7d801-b7fc-4f16-8907-15e4fbb33d89
 Your note content goes here.
 ```
 
+The ID lets the index recognize a note after it is renamed or moved. Assign
+it once and keep it unchanged when editing, renaming, or moving the note.
+When duplicating a note, give the copy a new ID.
+
 A UUID is a useful convention, but the library does not require UUID syntax.
-Keep the ID stable when editing or renaming a note; give copied notes a new ID.
-The indexer does not generate IDs or change your Markdown files.
+Add IDs using your preferred note-editing workflow, with a different value for
+each note you want to index. The indexer reads your notes; it does not generate
+IDs, add or change properties, or modify your Markdown files.
 
 - Missing or empty IDs: warn and skip the note.
 - Duplicate IDs: warn and skip **all** notes sharing that ID.

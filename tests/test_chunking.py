@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 import warnings
+from contextlib import closing
 from pathlib import Path
 
 from obsidian_vault.markdown import chunk_note, extract_sections, normalize_markdown
@@ -144,7 +145,7 @@ class ChunkingTests(unittest.TestCase):
         self.assertTrue(any(item.category is DuplicateFileIdWarning for item in caught))
         self.assertEqual(result.processed_notes, 1)
         self.assertEqual(result.duplicate_notes, 2)
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             note_rows = connection.execute("SELECT file_id FROM notes").fetchall()
             self.assertEqual(note_rows, [("valid",)])
             rows = connection.execute("SELECT chunk_id, file_id FROM chunks").fetchall()

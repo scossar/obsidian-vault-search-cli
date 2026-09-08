@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
@@ -72,7 +73,7 @@ def _batches[T](values: list[T], size: int) -> Iterator[list[T]]:
 
 
 def sqlite_chunks(database_path: Path) -> list[ChromaChunk]:
-    with sqlite3.connect(database_path) as connection:
+    with closing(sqlite3.connect(database_path)) as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
             """

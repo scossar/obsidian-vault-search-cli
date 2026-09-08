@@ -15,7 +15,6 @@ from .markdown import chunk_note
 from .models import Note
 from .notes import load_note
 
-
 SKIP_DIRECTORIES = {".git", ".obsidian", ".venv", "data", "node_modules", "__pycache__"}
 
 
@@ -46,6 +45,7 @@ class SyncResult:
 def markdown_paths(vault: Path) -> list[Path]:
     if not vault.is_dir():
         raise NotADirectoryError(f"Vault directory does not exist: {vault}")
+
     def walk_error(error: OSError) -> None:
         raise error
 
@@ -100,7 +100,9 @@ def sync_vault(
     notes_by_id: dict[str, list[Note]] = defaultdict(list)
     for note in notes:
         notes_by_id[note.file_id].append(note)
-    duplicate_ids = {file_id for file_id, matches in notes_by_id.items() if len(matches) > 1}
+    duplicate_ids = {
+        file_id for file_id, matches in notes_by_id.items() if len(matches) > 1
+    }
     duplicate_notes = sum(len(notes_by_id[file_id]) for file_id in duplicate_ids)
     for file_id in sorted(duplicate_ids):
         matches = ", ".join(note.relative_path for note in notes_by_id[file_id])
@@ -133,7 +135,9 @@ def sync_vault(
                     (note.file_id,),
                 ).fetchone()
                 if reuse_allowed and stored == (
-                    note.relative_path, note.title, note.content_hash
+                    note.relative_path,
+                    note.title,
+                    note.content_hash,
                 ):
                     chunk_count += database.connection.execute(
                         "SELECT COUNT(*) FROM chunks WHERE file_id = ?", (note.file_id,)
@@ -188,7 +192,9 @@ def sync_vault(
                     )
                     last_report = now
             database.delete_notes_not_in(processed_ids)
-            report(f"Synchronizing keyword index for {len(processed_ids)} eligible notes...")
+            report(
+                f"Synchronizing keyword index for {len(processed_ids)} eligible notes..."
+            )
             database.sync_keyword_notes(
                 (note for note in valid_notes if note.file_id in processed_ids),
                 rebuild=rebuild,

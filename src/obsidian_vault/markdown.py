@@ -12,7 +12,6 @@ from markdown_it.token import Token
 
 from .models import Chunk, Note, Section
 
-
 _MARKDOWN = MarkdownIt("commonmark")
 _WIKI_EMBED = re.compile(r"!\[\[([^]|]+)(?:\|([^]]+))?\]\]")
 _WIKI_LINK = re.compile(r"(?<!!)\[\[([^]|]+)(?:\|([^]]+))?\]\]")
@@ -272,7 +271,9 @@ def chunk_section(
     document_measure = lambda body: measure(f"{prefix}\n\n{body}")
     if document_measure("") >= limit:
         unit = "tokens" if token_counter else "words"
-        raise ValueError(f"heading path exceeds the {limit}-{unit} chunk limit: {prefix}")
+        raise ValueError(
+            f"heading path exceeds the {limit}-{unit} chunk limit: {prefix}"
+        )
 
     units: list[str] = []
     for unit in _block_units(section.raw_markdown):

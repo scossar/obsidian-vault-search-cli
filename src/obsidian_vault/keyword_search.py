@@ -22,6 +22,32 @@ class KeywordResult:
     excerpt_html: str
 
 
+def plain_keyword_expression(query: str) -> str:
+    """Match any input word, treating FTS operators as ordinary words."""
+    words = list(dict.fromkeys(re.findall(r'\w+', query, re.UNICODE)))
+    if not words:
+        raise ValueError('Enter at least one keyword containing letters or numbers.')
+    return ' OR '.join('"' + word + '"' for word in words)
+
+
+def matching_note_ids(database: Path, query: str) -> list[str]:
+    """Return every matching note ID for filtering, without ranking or a limit."""
+    expression = plain_keyword_expression(query)
+    database = database.expanduser().resolve()
+    if not database.is_file():
+        raise ValueError('Keyword index not found. Run obsidian-vault index --vault VAULT first.')
+    with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)) as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'notes_fts'").fetchone():
+            raise ValueError('Keyword index not found. Run obsidian-vault index --vault VAULT first.')
+        try:
+            return [row[0] for row in conn.execute(
+                'SELECT DISTINCT file_id FROM notes_fts WHERE notes_fts MATCH ?',
+                (expression,),
+            )]
+        except sqlite3.OperationalError as error:
+            raise ValueError(f'Keyword search failed: {error}') from error
+
+
 def search_keywords(database: Path, query: str, vault_reference: str,
                     limit: int = 20, *, fts: bool = False) -> list[KeywordResult]:
     if limit < 1:
@@ -32,10 +58,7 @@ def search_keywords(database: Path, query: str, vault_reference: str,
         expression = query
     else:
         # Treat ordinary input as words, not executable FTS query syntax.
-        words = list(dict.fromkeys(re.findall(r'\w+', query, re.UNICODE)))
-        if not words:
-            raise ValueError('Enter at least one keyword containing letters or numbers.')
-        expression = ' OR '.join('"' + word + '"' for word in words)
+        expression = plain_keyword_expression(query)
     database = database.expanduser().resolve()
     if not database.is_file():
         raise ValueError('Keyword index not found. Run obsidian-vault index --vault VAULT first.')

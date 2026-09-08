@@ -107,6 +107,38 @@ back to the vault directory name. Use `--vault-id` to override it. Opening
 results requires a working `obsidian://` URI handler; searching does not
 require the Obsidian application to be running.
 
+### Exclude keywords from semantic results
+
+Use `--exclude-keywords` to exclude whole notes whose indexed title or body
+contains any of the supplied words, while ranking the remaining passages by
+semantic similarity:
+
+```sh
+uv run --project ~/projects/obsidian-vault \
+  obsidian-vault search --vault ~/obsidian_vault \
+  --exclude-keywords 'Claude' \
+  -- 'An AI assisted writing application'
+```
+
+For example, `--exclude-keywords 'Claude ChatGPT'` excludes notes mentioning
+either word. Matching uses the same case-insensitive, token-based rules as
+ordinary keyword search. Input is split into words; FTS operators and phrase
+syntax are not interpreted. Empty or punctuation-only input is an error.
+Frontmatter and folder paths are not searched. A mention anywhere in the
+indexed title or body excludes every passage from that note.
+
+SQLite finds all matching note IDs, and Chroma applies the exclusion before
+selecting the requested number of semantic results. Semantic scores and the
+JSON result format are unchanged. If no notes match the exclusion, search
+proceeds normally; if every candidate is excluded, results are empty.
+
+This option requires the keyword index at `VAULT/data/chunks.sqlite3`; use
+`--database PATH` for a custom location. A missing keyword index produces an
+error. Run `index` after editing notes to keep SQLite and Chroma synchronized;
+exclusions reflect indexed content. Searches without `--exclude-keywords` do
+not require SQLite. No schema change or re-embedding is needed for existing
+synchronized indexes. This option is currently available through the CLI.
+
 ## Keyword search (FTS5)
 
 After running `index`, search remembered words without needing the exact phrase:

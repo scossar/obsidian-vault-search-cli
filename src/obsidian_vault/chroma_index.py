@@ -182,6 +182,8 @@ def query_collection(
     query: str,
     results: int,
     model: DefaultEmbeddingModel,
+    *,
+    where: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     client = chromadb.PersistentClient(path=str(path))
     collection: Collection = client.get_collection(
@@ -190,6 +192,7 @@ def query_collection(
     query_embedding = model.embed([query])
     return collection.query(
         query_embeddings=query_embedding,
+        where=where,
         n_results=results,
         include=["documents", "metadatas", "distances"],
     )

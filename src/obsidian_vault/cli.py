@@ -15,7 +15,7 @@ from .search import (
     render_results,
 )
 from .sync import sync_vault
-from .keyword_search import search_keywords
+from .keyword_search import matching_note_ids, search_keywords
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--chroma", type=Path, help="Chroma database directory")
     search.add_argument("--collection", default="obsidian-vault")
     search.add_argument("--results", type=int, default=5)
+    search.add_argument("--database", type=Path, help="keyword SQLite database (default: VAULT/data/chunks.sqlite3)")
+    search.add_argument(
+        "--exclude-keywords",
+        metavar="WORDS",
+        help="exclude whole notes containing any supplied word in their indexed title or body",
+    )
     search.add_argument(
         "--vault-id",
         help="Obsidian vault ID or name (default: discover from Obsidian config)",
@@ -161,6 +167,18 @@ def main() -> int:
     if args.command == "search":
         if args.results < 1:
             raise SystemExit("--results must be greater than zero")
+        args.vault = args.vault.expanduser().resolve()
+        where = None
+        if args.exclude_keywords is not None:
+            try:
+                excluded_ids = matching_note_ids(
+                    args.database or args.vault / "data/chunks.sqlite3",
+                    args.exclude_keywords,
+                )
+            except (ValueError, OSError) as error:
+                raise SystemExit(f'--exclude-keywords: {error}') from error
+            if excluded_ids:
+                where = {"file_id": {"$nin": excluded_ids}}
         chroma_path = args.chroma or args.vault / "data/chroma"
         model = DefaultEmbeddingModel()
         model.prepare()
@@ -170,6 +188,7 @@ def main() -> int:
             args.query,
             args.results,
             model,
+            where=where,
         )
         vault_reference = args.vault_id or find_vault_id(args.vault) or args.vault.name
         results = prepare_results(query_result, vault_reference)

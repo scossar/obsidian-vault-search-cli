@@ -48,3 +48,26 @@ class KeywordSearchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Run obsidian-vault index'):
                 search_keywords(database, 'relu', 'vault')
             self.assertFalse(database.exists())
+
+    def test_highlight_uses_fts_matches_and_escapes_note_markup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            vault = Path(directory)
+            database = vault / 'data/chunks.sqlite3'
+            (vault / 'Note.md').write_text(
+                '---\nfile_id: first\n---\n<script>ReLU & café</script>\nactivation function\n')
+            sync_vault(vault, database)
+            for query in ['relu AND function', 'relu OR function', 'NEAR(relu function, 5)']:
+                row = search_keywords(database, query, 'vault', fts=True)[0]
+                self.assertIn('<u>ReLU</u>', row.excerpt_html)
+                self.assertIn('<u>function</u>', row.excerpt_html)
+                self.assertNotIn('<u>activation</u>', row.excerpt_html)
+                self.assertNotIn('<script>', row.excerpt_html)
+                self.assertIn('&lt;script&gt;', row.excerpt_html)
+                self.assertIn('&amp;', row.excerpt_html)
+                self.assertIn('<br>', row.excerpt_html)
+                self.assertIn('<script>ReLU & café</script>\n', row.document)
+                self.assertNotIn('<u>', row.document)
+            row = search_keywords(database, '"activation function"', 'vault', fts=True)[0]
+            self.assertIn('<u>activation function</u>', row.excerpt_html)
+            row = search_keywords(database, 'cafe', 'vault')[0]
+            self.assertIn('<u>café</u>', row.excerpt_html)

@@ -143,7 +143,8 @@ server, or running Obsidian instance is required.
 
 Options include `--database`, `--vault-id`, `--results` (default 20), `--open N`,
 and `--json`. JSON is an array with `rank`, `file_id`, `source_path`,
-`heading_path`, `document` (plain-text excerpt), `score` (FTS5 BM25; lower is
+`heading_path`, `document` (plain-text excerpt), `excerpt_html` (escaped excerpt
+with FTS matches underlined and line breaks preserved), `score` (FTS5 BM25; lower is
 better), and `uri`. Empty results produce `[]`. Scores are not probabilities
 and are not comparable to semantic distances.
 

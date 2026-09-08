@@ -2,7 +2,9 @@
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+import html
 import re
+from uuid import uuid4
 import sqlite3
 
 from .search import obsidian_uri
@@ -17,6 +19,7 @@ class KeywordResult:
     document: str
     score: float
     uri: str
+    excerpt_html: str
 
 
 def search_keywords(database: Path, query: str, vault_reference: str,
@@ -39,16 +42,25 @@ def search_keywords(database: Path, query: str, vault_reference: str,
     with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)) as conn:
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'notes_fts'").fetchone():
             raise ValueError('Keyword index not found. Run obsidian-vault index --vault VAULT first.')
+        # Per-query markers distinguish FTS matches from literal note markup.
+        marker = uuid4().hex
+        start, end = f"[{marker}:start]", f"[{marker}:end]"
         try:
             rows = conn.execute('''
                 SELECT file_id, source_path, title,
-                       snippet(notes_fts, 4, '', '', ' … ', 48),
+                       snippet(notes_fts, 4, ?, ?, ' … ', 48),
                        bm25(notes_fts, 0, 0, 0, 5, 1) AS score
                 FROM notes_fts WHERE notes_fts MATCH ?
                 ORDER BY score, source_path COLLATE NOCASE, source_path LIMIT ?
-            ''', (expression, limit)).fetchall()
+            ''', (start, end, expression, limit)).fetchall()
         except sqlite3.OperationalError as error:
             raise ValueError(f'Keyword search failed: {error}') from error
-    return [KeywordResult(rank, file_id, path, (title,), document, score,
-                          obsidian_uri(vault_reference, path))
-            for rank, (file_id, path, title, document, score) in enumerate(rows, 1)]
+    results = []
+    for rank, (file_id, path, title, marked, score) in enumerate(rows, 1):
+        document = marked.replace(start, "").replace(end, "")
+        # Escape all note text before introducing our own formatting tags.
+        excerpt_html = (html.escape(marked).replace(start, "<u>").replace(end, "</u>")
+                        .replace("\r\n", "\n").replace("\n", "<br>"))
+        results.append(KeywordResult(rank, file_id, path, (title,), document, score,
+                                     obsidian_uri(vault_reference, path), excerpt_html))
+    return results

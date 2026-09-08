@@ -238,18 +238,9 @@ The package under `src/obsidian_vault/` contains the CLI, Markdown processing,
 SQLite synchronization, Chroma integration, and search presentation. Tests
 use temporary vaults and databases.
 
-`main.py` and `scripts/chunk_notes.py` are retained as legacy CLI wrappers;
-both call the same command parser and require a subcommand. Prefer the
+`main.py` is retained as a legacy CLI wrapper;
+it calls the same command parser and requires a subcommand. Prefer the
 installed `obsidian-vault` entry point for new usage.
-
-The `scripts/` directory also contains standalone note-maintenance tools:
-
-- `find_h1_first.py` lists notes whose first Markdown heading is H1.
-- `remove_first_h1.py` removes that heading. Use its `--dry-run` option to
-  preview changes before running it on a vault.
-
-Both maintenance tools accept a directory argument and otherwise default to
-`~/obsidian_vault`. They are not part of indexing or search.
 
 ## Repository separation
 

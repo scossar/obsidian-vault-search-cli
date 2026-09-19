@@ -29,9 +29,7 @@ class SearchResult:
 def find_vault_id(vault: Path, config_path: Path | None = None) -> str | None:
     """Return Obsidian's stable vault ID for a local vault path."""
     if config_path is None:
-        config_root = Path(
-            os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
-        )
+        config_root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         config_path = config_root / "obsidian" / "obsidian.json"
     try:
         configuration = json.loads(config_path.read_text())
@@ -54,7 +52,7 @@ def obsidian_uri(vault: str, source_path: str, heading: str | None = None) -> st
     if heading:
         file_target = f"{file_target}#{heading}"
     query = urlencode(
-        {"vault": vault, "file": file_target},
+        {"vault": vault, "file": file_target, "paneType": "tab"},
         quote_via=quote,
         safe="",
     )
